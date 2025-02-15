@@ -1,22 +1,28 @@
 ﻿using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.OpenApi.Models;
 
-namespace DLW.BFF.Template.BFF.Extensions
+namespace DLW.BFF.Template.Core.Extensions
 {
     public static class ServiceCollectionExtensions
     {
         /// <summary>Adds Swagger documentation and OAuth2 security definition to the IServiceCollection.</summary>
         /// <param name="services">The IServiceCollection to add the Swagger documentation to.</param>
         /// <param name="configuration">The IConfiguration instance containing the Azure AD options.</param>
+        /// <param name="title">The Title for the open api document.</param>
+        /// <param name="authorizationUrl">The redirect URL to use for the OAuth login. If none is provided, the default login.microsoft online will be used</param>
         /// <returns>The updated IServiceCollection with Swagger documentation and OAuth2 security definition.</returns>
         /// <remarks>
         ///     This method configures Swagger to generate API documentation and adds an OAuth2 security definition for authentication.
         ///     It retrieves the Azure AD options from the configuration and uses them to set up the OAuth2 security scheme.
         /// </remarks>
         /// <exception cref="ArgumentNullException">Thrown when the Azure AD options are null.</exception>
-        public static IServiceCollection AddSwagger(this IServiceCollection services, IConfiguration configuration)
+        public static IServiceCollection AddSwagger(this IServiceCollection services, IConfiguration configuration, string? title, string? authorizationUrl = null)
         {
             services.AddSwaggerGen(options =>
             {
@@ -25,10 +31,19 @@ namespace DLW.BFF.Template.BFF.Extensions
                 ArgumentNullException.ThrowIfNull(azureAdOptions, nameof(azureAdOptions));
 
                 // Add the Swagger document
-                options.SwaggerDoc("v1", new OpenApiInfo { Title = typeof(Program).Assembly.GetName().Name, Version = "v1" });
+                options.SwaggerDoc("v1", new OpenApiInfo { Title = title, Version = "v1" });
 
                 // Add the OAuth2 security definition
                 var audience = configuration.GetValue<string>("AzureAd:Audience");
+                var authUrl = authorizationUrl is not null 
+                    ? new Uri(authorizationUrl, UriKind.RelativeOrAbsolute)
+                    : new Uri($"{azureAdOptions.Instance}{azureAdOptions.TenantId}/oauth2/v2.0/authorize");
+
+                // If a custom authorization URL is provided, don't use a token URL
+                var tokenUrl = authorizationUrl is not null
+                    ? null
+                    : new Uri($"{azureAdOptions.Instance}{azureAdOptions.TenantId}/oauth2/v2.0/token");
+
                 if (!string.IsNullOrEmpty(audience))
                 {
                     options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
@@ -38,7 +53,8 @@ namespace DLW.BFF.Template.BFF.Extensions
                         {
                             Implicit = new OpenApiOAuthFlow()
                             {
-                                AuthorizationUrl = new Uri($"/microsoftidentity/account/signin", UriKind.Relative),
+                                AuthorizationUrl = authUrl,
+                                TokenUrl = tokenUrl,
                                 Scopes = new Dictionary<string, string>
                                 {
                                     [audience] = "OAuth"
@@ -46,7 +62,7 @@ namespace DLW.BFF.Template.BFF.Extensions
                             }
                         }
                     });
-                }                
+                }
 
                 var oauth2SecurityScheme = new OpenApiSecurityScheme
                 {
@@ -61,14 +77,11 @@ namespace DLW.BFF.Template.BFF.Extensions
             return services;
         }
 
-        /// <summary>Adds authentication services and configures cookie properties for ASP.NET Core cookie authentication.</summary>
-        /// <param name="services">The IServiceCollection to add the authentication services to.</param>
-        /// <param name="configuration">The IConfiguration instance containing the authentication options.</param>
-        /// <returns>The updated IServiceCollection with authentication services and configured cookie properties.</returns>
-        /// <remarks>
-        ///     This method adds Microsoft Identity UI services, configures authentication using Microsoft Identity Web App, and sets up cookie properties for ASP.NET Core cookie authentication.
-        /// </remarks>
-        public static IServiceCollection AddAuthentication(this IServiceCollection services, IConfiguration configuration)
+        /// <summary>Adds cookie authentication to the specified IServiceCollection.</summary>
+        /// <param name="services">The IServiceCollection to add the authentication to.</param>
+        /// <param name="configuration">The IConfiguration instance containing the authentication settings.</param>
+        /// <returns>The IServiceCollection with the added authentication services.</returns>
+        public static IServiceCollection AddCookieAuthentication(this IServiceCollection services, IConfiguration configuration)
         {
             // Add the MS Identity UI services
             services.AddRazorPages().AddMicrosoftIdentityUI();
@@ -81,6 +94,20 @@ namespace DLW.BFF.Template.BFF.Extensions
                 options.Cookie.HttpOnly = true;
                 options.Cookie.IsEssential = true;
             });
+
+            return services;
+        }
+
+        /// <summary>Adds OAuth token authentication to the specified IServiceCollection.</summary>
+        /// <param name="services">The IServiceCollection to add the authentication to.</param>
+        /// <param name="configuration">The IConfiguration instance containing the authentication settings.</param>
+        /// <returns>The IServiceCollection with the added authentication services.</returns>
+        public static IServiceCollection AddOAuthTokenAuthentication(this IServiceCollection services, IConfiguration configuration)
+        {
+            // Add OAuth bearer token authentication
+            services
+                .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+                .AddMicrosoftIdentityWebApi(configuration.GetSection("AzureAd"));
 
             return services;
         }
