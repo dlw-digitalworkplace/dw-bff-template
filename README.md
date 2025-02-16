@@ -12,11 +12,12 @@ For detailed documentation on how to run this application, please see the [BFF S
 ## Maintainer
 This project is maintained by [agtenr](https://github.com/agtenr).
 
-## Future improvements and to do's
-* To do: Add the OAuth2 authenticated web api
-* To do: Add documentation (intro, code components, dev setup, ...)
-* To do: Clean-up downstream api calling (remove hardcoded string, move to service, ...)
-* Improvement: support for running as MS Teams app
+## Future improvements
+* Improvement: Custom hook/provider in the front-end to keep authentication state
+* Improvement: Clean-up downstream api calling (remove hardcoded string, move to service, ...)
+* Improvement: Support for running the app as an MS Teams app
 
 ## Resources
-To do
+* [Create an ASP.NET Core app with React in Visual Studio](https://learn.microsoft.com/en-us/visualstudio/javascript/tutorial-asp-net-core-with-react?view=vs-2022)
+* [Make secure .NET Microservices and Web Applications](https://learn.microsoft.com/en-us/dotnet/architecture/microservices/secure-net-microservices-web-applications/)
+* [A web API that calls web APIs: Code configuration](https://learn.microsoft.com/en-us/entra/identity-platform/scenario-web-api-call-api-app-configuration?tabs=aspnetcore)
