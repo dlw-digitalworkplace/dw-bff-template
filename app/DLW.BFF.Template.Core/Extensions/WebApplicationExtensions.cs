@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Identity.Web;
 
 namespace DLW.BFF.Template.Core.Extensions
 {
@@ -14,20 +13,22 @@ namespace DLW.BFF.Template.Core.Extensions
                 app.UseSwagger();
                 app.UseSwaggerUI(config =>
                 {
-                    // Get the Azure AD options from the configuration
-                    var azureAdOptions = app.Configuration.GetSection("AzureAd").Get<MicrosoftIdentityOptions>();
-                    ArgumentNullException.ThrowIfNull(azureAdOptions, nameof(azureAdOptions));
-
+                    // Configure JSON endpoint
                     config.SwaggerEndpoint("/swagger/v1/swagger.json", $"{title} v1");
 
                     // Add default client id
-                    config.OAuthClientId(azureAdOptions.ClientId);
+                    var clientId = app.Configuration.GetValue<string>("AzureAd:ClientId");
+                    if (clientId is not null)
+                    {
+                        config.OAuthClientId(clientId);
+                    }
 
                     // Add default scope
                     var audience = app.Configuration.GetValue<string>("AzureAd:Audience");
-                    if (!string.IsNullOrEmpty(audience))
+                    var scopes = app.Configuration.GetValue<string>("AzureAd:Scopes");
+                    if (!string.IsNullOrEmpty(audience) && !string.IsNullOrEmpty(scopes))
                     {
-                        config.OAuthScopes(audience);
+                        config.OAuthScopes($"{audience}/{scopes}");
                     }
                 });
             }

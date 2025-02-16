@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using Microsoft.OpenApi.Models;
+using System.Security.AccessControl;
 
 namespace DLW.BFF.Template.Core.Extensions
 {
@@ -26,43 +27,39 @@ namespace DLW.BFF.Template.Core.Extensions
         {
             services.AddSwaggerGen(options =>
             {
-                // Get the Azure AD options from the configuration
-                var azureAdOptions = configuration.GetSection("AzureAd").Get<MicrosoftIdentityOptions>();
-                ArgumentNullException.ThrowIfNull(azureAdOptions, nameof(azureAdOptions));
-
                 // Add the Swagger document
                 options.SwaggerDoc("v1", new OpenApiInfo { Title = title, Version = "v1" });
 
-                // Add the OAuth2 security definition
+                // Get configuration properties
+                var instance = configuration.GetValue<string>("AzureAd:Instance");
+                var tenantId = configuration.GetValue<string>("AzureAd:TenantId");
                 var audience = configuration.GetValue<string>("AzureAd:Audience");
-                var authUrl = authorizationUrl is not null 
-                    ? new Uri(authorizationUrl, UriKind.RelativeOrAbsolute)
-                    : new Uri($"{azureAdOptions.Instance}{azureAdOptions.TenantId}/oauth2/v2.0/authorize");
+                var scopes = configuration.GetValue<string>("AzureAd:Scopes");
 
-                // If a custom authorization URL is provided, don't use a token URL
+                // Set the URLs
+                var authUrl = authorizationUrl is not null
+                    ? new Uri(authorizationUrl, UriKind.RelativeOrAbsolute)
+                    : new Uri($"{instance}{tenantId}/oauth2/v2.0/authorize");
                 var tokenUrl = authorizationUrl is not null
                     ? null
-                    : new Uri($"{azureAdOptions.Instance}{azureAdOptions.TenantId}/oauth2/v2.0/token");
+                    : new Uri($"{instance}{tenantId}/oauth2/v2.0/token");
 
-                if (!string.IsNullOrEmpty(audience))
+                options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
                 {
-                    options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
+                    Type = SecuritySchemeType.OAuth2,
+                    Flows = new OpenApiOAuthFlows()
                     {
-                        Type = SecuritySchemeType.OAuth2,
-                        Flows = new OpenApiOAuthFlows()
+                        Implicit = new OpenApiOAuthFlow()
                         {
-                            Implicit = new OpenApiOAuthFlow()
+                            AuthorizationUrl = authUrl,
+                            TokenUrl = tokenUrl,
+                            Scopes = new Dictionary<string, string>
                             {
-                                AuthorizationUrl = authUrl,
-                                TokenUrl = tokenUrl,
-                                Scopes = new Dictionary<string, string>
-                                {
-                                    [audience] = "OAuth"
-                                }
+                                [$"{audience}/{scopes}"] = "OAuth"
                             }
                         }
-                    });
-                }
+                    }
+                });
 
                 var oauth2SecurityScheme = new OpenApiSecurityScheme
                 {
@@ -71,9 +68,10 @@ namespace DLW.BFF.Template.Core.Extensions
 
                 options.AddSecurityRequirement(new OpenApiSecurityRequirement
                 {
-                    [oauth2SecurityScheme] = [audience]
+                    [oauth2SecurityScheme] = new[] { $"{audience}/{scopes}" }
                 });
             });
+
             return services;
         }
 
@@ -85,7 +83,11 @@ namespace DLW.BFF.Template.Core.Extensions
         {
             // Add the MS Identity UI services
             services.AddRazorPages().AddMicrosoftIdentityUI();
-            services.AddMicrosoftIdentityWebAppAuthentication(configuration);
+            services
+                .AddMicrosoftIdentityWebAppAuthentication(configuration)
+                .EnableTokenAcquisitionToCallDownstreamApi()
+                .AddDownstreamApi("DownstreamAPI", configuration.GetSection("DownstreamAPI"))
+                .AddInMemoryTokenCaches();
 
             // Configure cookie properties for ASP.NET Core cookie authentication.
             services.Configure<CookieAuthenticationOptions>(CookieAuthenticationDefaults.AuthenticationScheme, options => {
@@ -107,7 +109,7 @@ namespace DLW.BFF.Template.Core.Extensions
             // Add OAuth bearer token authentication
             services
                 .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-                .AddMicrosoftIdentityWebApi(configuration.GetSection("AzureAd"));
+                .AddMicrosoftIdentityWebApi(configuration);
 
             return services;
         }

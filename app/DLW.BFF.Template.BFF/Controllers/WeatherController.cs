@@ -1,25 +1,32 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Identity.Abstractions;
 
 namespace DLW.BFF.Template.BFF.Controllers
 {
     [ApiController]
     [Authorize]
     [Route("api/[controller]")]
-    public class WeatherController() : ControllerBase
+    public class WeatherController : ControllerBase
     {
-        private static readonly string[] Summaries = new[]
+        private readonly IDownstreamApi _downstreamApi;
+
+        public WeatherController(IDownstreamApi downstreamApi)
         {
-            "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-        };
+            _downstreamApi = downstreamApi;
+        }
 
         [HttpGet]
-        public IEnumerable<string> Get()
+        public async Task<IActionResult> Get()
         {
-            return Enumerable
-                .Range(1, 5)
-                .Select(index => Summaries[Random.Shared.Next(Summaries.Length)])
-                .ToArray();
+            var data = await _downstreamApi.CallApiForUserAsync<string[]>(
+                "DownstreamAPI",
+                options => { 
+                    options.HttpMethod = "GET";
+                    options.RelativePath = "api/WeatherForecast";
+                }
+            );
+            return Ok(data);
         }
     }
 }
